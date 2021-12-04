@@ -116,3 +116,83 @@ We can see that in cross validation model1 got the lowest rmse and model2 got th
 
 # Problem 2
 
+Import the data:
+
+```{r}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+```
+
+```{r}
+bootStraps = 
+  weather_df %>%
+  bootstrap(n = 5000) %>%
+  mutate(
+    models = map(strap, ~ lm(tmax ~ tmin, data = .x)),
+    results = map(models, broom::tidy),
+    results_glance = map(models, broom::glance)) %>%
+  select(-strap, -models) %>%
+  unnest(results, results_glance) %>%
+  select(.id, term, estimate, r.squared) %>%
+  pivot_wider(
+    names_from = "term",
+    values_from = "estimate"
+  ) %>%
+  janitor::clean_names() %>%
+  mutate(log_coef = log(intercept * tmin))
+bootStraps
+```
+
+Plot the distribution of r̂2:
+
+```{r}
+bootStraps %>%
+  ggplot(aes(x = r_squared)) +
+  geom_density() +
+  labs(x = "Estimated r squared", title = "Distribution of r̂2")
+```
+
+The r̂2 followed a normal distribution and had a well bell shaped with a mean value around 0.91. It shows that the model had a good performance.
+
+Plot the distribution of log(β̂0 ∗β1):
+```{r}
+bootStraps %>%
+  ggplot(aes(x = log_coef)) +
+  geom_density() +
+  labs(x = "log(beta0 x beta1)", title = "Distribution of log_coef")
+```
+
+The log(β̂0 ∗β1) followed a normal distribution and had a bell shaped with a mean value around 2.02.
+
+## 2.5% and 97.5% quantiles for \hat{r}^2:
+
+```{r}
+CI_r = bootStraps %>%
+  pull(r_squared) %>%
+  quantile(c(0.025, 0.975))
+
+CI_r
+```
+
+The 95% confidence interval for  r̂2 is (`r CI_r[[1]]`, `r CI_r[[2]]`).
+
+## 2.5% and 97.5% quantiles for r̂2:
+
+```{r}
+CI_log = bootStraps %>%
+  pull(log_coef) %>%
+  quantile(c(0.025, 0.975))
+
+CI_log
+```
+
+The 95% confidence interval for  log(β̂0 ∗β1) is (`r CI_log[[1]]`, `r CI_log[[2]]`).
